@@ -5,7 +5,7 @@ require('dotenv').config();
 const config = {
     orgName: 'personal-for-testing',
     repos: ['git-tag', 'repo1', 'repo2'],
-    tagName: 'v1.0.3',
+    tagName: 'v6',
     branch: 'main', 
     githubToken: process.env.GITHUB_TOKEN
 };
@@ -32,6 +32,89 @@ async function getBranchReference(repo) {
     }
 }
 
+async function getLatestTag(repo) {
+    try {
+        const response = await githubApi.get(`/repos/${config.orgName}/${repo}/tags`);
+        return response.data[0]?.name; // Returns undefined if no tags exist
+    } catch (error) {
+        console.log(`No previous tags found in ${repo}`);
+        return null;
+    }
+}
+
+async function generateReleaseNotes(repo, fromTag, toSha) {
+    try {
+        let compareUrl;
+        if (fromTag) {
+            // If we have a previous tag, compare it with the new changes
+            compareUrl = `/repos/${config.orgName}/${repo}/compare/${fromTag}...${toSha}`;
+        } else {
+            // If this is the first tag, get all commits up to this point
+            compareUrl = `/repos/${config.orgName}/${repo}/commits?sha=${toSha}`;
+        }
+
+        const response = await githubApi.get(compareUrl);
+        const commits = fromTag ? response.data.commits : response.data;
+
+        // Generate release notes
+        let releaseNotes = `# What's Changed\n\n`;
+
+        const commitsByType = {
+            feat: [],
+            fix: [],
+            docs: [],
+            style: [],
+            refactor: [],
+            test: [],
+            chore: [],
+            other: []
+        };
+
+        // Categorize commits based on conventional commit messages
+        commits.forEach(commit => {
+            const message = commit.commit.message.split('\n')[0];
+            const author = commit.commit.author.name;
+            
+            // Parse conventional commit format
+            const conventionalCommitRegex = /^(feat|fix|docs|style|refactor|test|chore)(?:\(([^\)]+)\))?: (.+)$/;
+            const match = message.match(conventionalCommitRegex);
+
+            if (match) {
+                const [, type, scope, description] = match;
+                const formattedMessage = scope ? 
+                    `- ${description} (${scope}) by @${author}` :
+                    `- ${description} by @${author}`;
+                commitsByType[type].push(formattedMessage);
+            } else {
+                commitsByType.other.push(`- ${message} by @${author}`);
+            }
+        });
+
+        // Build release notes with sections
+        const sections = [
+            { type: 'feat', title: '### New Features' },
+            { type: 'fix', title: '### Bug Fixes' },
+            { type: 'docs', title: '### Documentation' },
+            { type: 'style', title: '### Styling' },
+            { type: 'refactor', title: '### Code Refactoring' },
+            { type: 'test', title: '### Testing' },
+            { type: 'chore', title: '### Maintenance' },
+            { type: 'other', title: '### Other Changes' }
+        ];
+
+        sections.forEach(({ type, title }) => {
+            if (commitsByType[type].length > 0) {
+                releaseNotes += `\n${title}\n${commitsByType[type].join('\n')}\n`;
+            }
+        });
+
+        return releaseNotes;
+    } catch (error) {
+        console.error(`Error generating release notes for ${repo}:`, error.message);
+        return `Release ${config.tagName}`;
+    }
+}
+
 async function checkIfTagExists(repo) {
     try {
         await githubApi.get(`/repos/${config.orgName}/${repo}/git/refs/tags/${config.tagName}`);
@@ -46,11 +129,15 @@ async function checkIfTagExists(repo) {
 
 async function createRelease(repo, tagSha) {
     try {
+        // Get the previous tag to generate release notes
+        const previousTag = await getLatestTag(repo);
+        const releaseNotes = await generateReleaseNotes(repo, previousTag, tagSha);
+
         const releaseData = {
             tag_name: config.tagName,
             target_commitish: tagSha,
             name: config.tagName,
-            body: `Release ${config.tagName}`,
+            body: releaseNotes,
             draft: false,
             prerelease: false
         };
