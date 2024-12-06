@@ -4,6 +4,17 @@ import path from 'path';
 import fs from 'fs';
 import simpleGit from 'simple-git';
 
+const GITHUB_API_BASE_URL = 'https://api.github.com';
+
+export const createGithubApiClient = (token) => {
+    return axios.create({
+        baseURL: GITHUB_API_BASE_URL,
+        headers: {
+            Authorization: `token ${token}`,
+            Accept: 'application/vnd.github.v3+json',
+        },
+    });
+};
 
 // Initialize GitHub API client
 export const initializeGithubClient = (githubToken) => {
@@ -68,7 +79,7 @@ export const deleteTagFromRepo = async (githubApi, orgName, repo, tagName) => {
         console.log(`✅ Successfully deleted tag ${tagName} from ${repo}`);
     } catch (error) {
         if (error.response?.status === 404) {
-            console.log(`❌ Tag ${tagName} not found in ${repo}`);
+            throw new Error (`❌ Tag ${tagName} not found in ${repo}`);
         } else {
             throw error;
         }
@@ -78,13 +89,7 @@ export const deleteTagFromRepo = async (githubApi, orgName, repo, tagName) => {
 // Validates if the organization exists and the GitHub token has appropriate access.
 
 export const validateAccess = async (orgName, githubToken) => {
-    const githubApi = axios.create({
-        baseURL: 'https://api.github.com',
-        headers: {
-            'Authorization': `token ${githubToken}`,
-            'Accept': 'application/vnd.github.v3+json',
-        },
-    });
+    const githubApi = createGithubApiClient(githubToken)
 
     try {
         await githubApi.get(`/orgs/${orgName}`);
@@ -98,13 +103,8 @@ export const validateAccess = async (orgName, githubToken) => {
 // Validates if the repository exists within the organization.
  
 export const validateRepository = async (orgName, repo, githubToken) => {
-    const githubApi = axios.create({
-        baseURL: 'https://api.github.com',
-        headers: {
-            'Authorization': `token ${githubToken}`,
-            'Accept': 'application/vnd.github.v3+json',
-        },
-    });
+    const githubApi = createGithubApiClient(githubToken)
+
 
     try {
         await githubApi.get(`/repos/${orgName}/${repo}`);
@@ -116,13 +116,8 @@ export const validateRepository = async (orgName, repo, githubToken) => {
 
 // Validates if the branch exists in the repository.
 export const validateBranch = async (orgName, repo, branchName, githubToken) => {
-    const githubApi = axios.create({
-        baseURL: 'https://api.github.com',
-        headers: {
-            'Authorization': `token ${githubToken}`,
-            'Accept': 'application/vnd.github.v3+json',
-        },
-    });
+    const githubApi = createGithubApiClient(githubToken)
+
 
     try {
         await githubApi.get(`/repos/${orgName}/${repo}/branches/${branchName}`);
@@ -162,7 +157,39 @@ export const setupRepository = async (orgName, repo, githubToken, remoteName, ba
         throw new Error(`Failed to setup repository ${repo}: ${error.message}`);
     }
 };
+export const deleteReleases = async (githubToken, orgName, repo, releaseName) => {
+    try {
 
+        const githubApi = createGithubApiClient(githubToken)
+
+        const { data: releases } = await githubApi.get(`/repos/${orgName}/${repo}/releases`);
+
+        const filteredReleases = releases.filter((release) => {
+            if (!releaseName) return true;
+
+            
+
+            const matchesType =
+                type === 'all' || (type === 'prerelease' && release.prerelease) || (type === 'release' && !release.prerelease);
+
+            const matchesOlderThan = olderThan ? new Date(release.created_at) < new Date(olderThan) : true;
+
+            const matchesNameContains = releaseName ? release.name.includes(releaseName) : true;
+
+            return matchesType && matchesOlderThan && matchesNameContains;
+        });
+
+        for (const release of filteredReleases) {
+            await githubApi.delete(`/repos/${orgName}/${repo}/releases/${release.id}`);
+            console.log(`Deleted release: ${release.name} (${release.id}) from repo ${repo}`);
+        }
+
+        return { message: `Deleted ${filteredReleases.length} releases from ${repo}` };
+    } catch (error) {
+        console.error(`Error deleting releases from ${repo}:`, error.message);
+        throw new Error(`Failed to delete releases for ${repo}`);
+    }
+};
 // Synchronizes branches between local and upstream.
 export const syncBranches = async (git, repo, localBranch, upstreamBranch, remoteName) => {
     try {

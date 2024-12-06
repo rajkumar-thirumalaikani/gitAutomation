@@ -1,5 +1,5 @@
 import express from 'express';
-import { createTagAndRelease, deleteTagController, syncRepositories } from '../controllers/githubController.js';
+import { createTagAndRelease, deleteReleasesHandler, deleteTagController, syncRepositories } from '../controllers/githubController.js';
 
 const router = express.Router();
 
@@ -160,6 +160,113 @@ router.post('/create-tag', createTagAndRelease);
  *         description: Internal server error
  */
 router.post('/merge-conflict', syncRepositories);
+
+/**
+ * @swagger
+ * /delete-releases:
+ *   post:
+ *     summary: Delete Multiple Releases with Filtering Options
+ *     tags:
+ *       - Releases
+ *     description: >
+ *       Delete releases from specified repositories with comprehensive filtering capabilities.
+ *       Supports deleting all releases or applying advanced filters.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - orgName
+ *               - repos
+ *               - githubToken
+ *             properties:
+ *               orgName:
+ *                 type: string
+ *                 description: GitHub organization name
+ *                 example: my-organization
+ *               repos:
+ *                 type: array
+ *                 description: List of repository names to delete releases from
+ *                 items:
+ *                   type: string
+ *                 example: ["repo1", "repo2"]
+ *               githubToken:
+ *                 type: string
+ *                 description: GitHub personal access token with appropriate permissions
+ *                 example: ghp_1234abcd...
+ *               filterOptions:
+ *                 type: object
+ *                 description: Optional filtering parameters for release deletion
+ *                 properties:
+ *                   type:
+ *                     type: string
+ *                     enum: ['all', 'filter']
+ *                     default: 'all'
+ *                     description: >
+ *                       Deletion type:
+ *                       - 'all': Delete all releases
+ *                       - 'filter': Apply specific filters
+ *                   olderThan:
+ *                     type: string
+ *                     format: date
+ *                     description: Delete releases created before this date
+ *                     example: "2023-01-01"
+ *                   nameContains:
+ *                     type: string
+ *                     description: Delete releases whose name or tag contains this string
+ *                     example: "beta"
+ *     responses:
+ *       '200':
+ *         description: Successful release deletion
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Release deletion process completed"
+ *                 deletedReleases:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       repo:
+ *                         type: string
+ *                       releaseId:
+ *                         type: integer
+ *                       releaseName:
+ *                         type: string
+ *                       createdAt:
+ *                         type: string
+ *                         format: date-time
+ *                 errors:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       repo:
+ *                         type: string
+ *                       error:
+ *                         type: string
+ *                 totalReleasesDeleted:
+ *                   type: integer
+ *       '500':
+ *         description: Server error during release deletion
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Failed to delete releases"
+ *                 error:
+ *                   type: string
+ */
+router.post('/delete-releases', deleteReleasesHandler);
 
 
 export default router;

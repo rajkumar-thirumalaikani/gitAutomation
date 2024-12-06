@@ -1,6 +1,7 @@
 
 import {
     checkTagExists,
+    deleteReleases,
     deleteTagFromRepo,
     generateReleaseNotes,
     getBranchSha,
@@ -133,3 +134,27 @@ export const syncRepositories = async (req, res) => {
         res.status(500).json({ message: `Error: ${error.message}` });
     }
 };
+
+export const deleteReleasesHandler =   async (req, res) => {
+    const { orgName, repos, githubToken, releaseName } = req.body;
+
+    if (!orgName || !repos || !githubToken) {
+        return res.status(400).json({ error: 'orgName, repos, and githubToken are required.' });
+    }
+
+
+    try {
+        const results = await Promise.all(
+            repos.map((repo) => deleteReleases(githubToken, orgName, repo, releaseName))
+        );
+
+        res.status(200).json({
+            message: 'Releases processed successfully.',
+            results,
+        });
+    } catch (error) {
+        res.status(500).json({
+            error: error.message,
+        });
+    }
+}
