@@ -57,8 +57,7 @@ export const createTagAndRelease = async (req, res) => {
             const tagExists = await checkTagExists(githubApi, orgName, repo, tagName);
             if (tagExists) {
                 console.log(`Tag ${tagName} already exists in ${repo}. Skipping...`);
-                res.status(400).json({ message: `Tag ${tagName} already exists in ${repo}. Skipping...` });
-                return;
+                return res.status(400).json({ message: `Tag ${tagName} already exists in ${repo}. Skipping...` });
             }
 
             // Create tag
@@ -68,9 +67,34 @@ export const createTagAndRelease = async (req, res) => {
             });
             console.log(`Tag ${tagName} created in ${repo}.`);
 
-            // Generate release notes
-            const previousTag = (await githubApi.get(`/repos/${orgName}/${repo}/tags`)).data[0]?.name;
-            const releaseNotes = await generateReleaseNotes(githubApi, orgName, repo, previousTag, branchSha);
+            // Determine the previous tag
+            let previousTag;
+            const tags = (await githubApi.get(`/repos/${orgName}/${repo}/tags`)).data;
+
+            if (tags.length > 0) {
+                // Get the most recent tag excluding the current one
+                previousTag = tags.find(tag => tag.name !== tagName)?.name;
+                console.log(`Previous tag found: ${previousTag}`);
+            }
+
+            // Generate release notes using GitHub API
+            const generateNotesPayload = {
+                tag_name: tagName,
+                target_commitish: branch,
+            };
+
+            // Include previous_tag_name only if it exists
+            if (previousTag) {
+                generateNotesPayload.previous_tag_name = previousTag;
+            }
+
+            const releaseNotesResponse = await githubApi.post(
+                `/repos/${orgName}/${repo}/releases/generate-notes`,
+                generateNotesPayload
+            );
+
+            const releaseNotes = releaseNotesResponse.data.body;
+            console.log("Release notes ::", releaseNotes);
 
             // Create release
             await githubApi.post(`/repos/${orgName}/${repo}/releases`, {
@@ -87,11 +111,10 @@ export const createTagAndRelease = async (req, res) => {
 
         res.status(200).json({ message: 'Tag and release creation process completed!' });
     } catch (error) {
-        console.error('Error:', error);
+        console.error('Error:', error.response?.data || error.message);
         res.status(500).json({ message: error.message });
     }
 };
-
 
 
 

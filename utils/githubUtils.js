@@ -67,16 +67,32 @@ export const generateReleaseNotes = async (githubApi, orgName, repo, fromTag, to
         return releaseNotes;
     } catch (error) {
         console.error('Error generating release notes:', error.message);
-        return `Release notes for ${toSha}`;
+        return `Failed to generate release notes. Please verify tags and commits.`;
     }
 };
 
-// Delete a tag from a repository
+
+
+
 export const deleteTagFromRepo = async (githubApi, orgName, repo, tagName) => {
     try {
-        const response = await githubApi.get(`/repos/${orgName}/${repo}/git/refs/tags/${tagName}`);
-        await githubApi.delete(`/repos/${orgName}/${repo}/git/refs/tags/${tagName}`);
-        console.log(`✅ Successfully deleted tag ${tagName} from ${repo}`);
+        if (tagName === 'all') {
+            // Fetch the list of tags in the repository
+            const response = await githubApi.get(`/repos/${orgName}/${repo}/tags`);
+            const tags = response.data;
+            
+            // Delete each tag
+            for (const tag of tags) {
+                const tagName = tag.name;
+                await githubApi.delete(`/repos/${orgName}/${repo}/git/refs/tags/${tagName}`);
+                console.log(`✅ Successfully deleted tag ${tagName} from ${repo}`);
+            }
+        } else {
+            // Delete a specific tag
+            await githubApi.get(`/repos/${orgName}/${repo}/git/refs/tags/${tagName}`);
+            await githubApi.delete(`/repos/${orgName}/${repo}/git/refs/tags/${tagName}`);
+            console.log(`✅ Successfully deleted tag ${tagName} from ${repo}`);
+        }
     } catch (error) {
         if (error.response?.status === 404) {
             throw new Error (`❌ Tag ${tagName} not found in ${repo}`);
@@ -85,6 +101,7 @@ export const deleteTagFromRepo = async (githubApi, orgName, repo, tagName) => {
         }
     }
 };
+
 
 // Validates if the organization exists and the GitHub token has appropriate access.
 
